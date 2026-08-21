@@ -1,0 +1,5 @@
+pytest>=8.2,<9
+requests>=2.31,<3
+PyYAML>=6.0.1,<7
+allure-pytest>=2.13.5,<3
+PyMySQL>=1.1,<2

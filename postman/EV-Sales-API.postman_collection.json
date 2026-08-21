@@ -1,0 +1,514 @@
+{
+  "info": {
+    "_postman_id": "0c3d5574-90f1-4d1e-9ef7-73961d10b2dc",
+    "name": "EV Sales API - Safe Regression",
+    "description": "新能源汽车销售系统的安全查询集合。仅包含登录、公开查询、客户本人查询和权限边界验证，不包含创建订单、支付、预约或售后写入接口。Apifox 可直接导入 Postman Collection v2.1。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const baseUrl = pm.variables.replaceIn(\"{{baseUrl}}\").trim();",
+          "const isHttps = /^https:\\/\\//i.test(baseUrl);",
+          "const isLoopback = /^http:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?(\\/|$)/i.test(baseUrl);",
+          "const containsCredentials = /^https?:\\/\\/[^/]*@/i.test(baseUrl);",
+          "const isSafeTarget = (isHttps || isLoopback) && !containsCredentials;",
+          "if (!isSafeTarget) {",
+          "  pm.test(\"Base URL uses HTTPS or loopback without credentials\", function () {",
+          "    pm.expect(isSafeTarget).to.eql(true);",
+          "  });",
+          "  pm.variables.set(\"baseUrl\", \"http://127.0.0.1:1\");",
+          "  pm.execution.skipRequest();",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Authentication",
+      "description": "登录接口由当前被测系统定义为 query 参数。非本机环境必须使用 HTTPS，并且只能使用可轮换的专用测试账号。",
+      "item": [
+        {
+          "name": "Customer login and save token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Business code is 200\", function () {",
+                  "  pm.expect(body.code).to.eql(200);",
+                  "});",
+                  "pm.test(\"Login returns a token\", function () {",
+                  "  pm.expect(body.data).to.be.an(\"object\");",
+                  "  pm.expect(body.data.token).to.be.a(\"string\").and.not.empty;",
+                  "});",
+                  "if (body.code === 200 && body.data && body.data.token) {",
+                  "  pm.collectionVariables.set(\"accessToken\", body.data.token);",
+                  "  if (pm.environment.name) {",
+                  "    pm.environment.set(\"accessToken\", body.data.token);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login?username={{customerUsername}}&password={{customerPassword}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{customerUsername}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{customerPassword}}"
+                }
+              ]
+            },
+            "description": "使用专用客户测试账号登录，并把 JWT 保存到 accessToken。模板不包含真实账号或密码。"
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid credentials are rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP status is 401\", function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Business code is 401\", function () {",
+                  "  pm.expect(body.code).to.eql(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login?username=not_exists_user_for_api_test&password=wrong_password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "not_exists_user_for_api_test"
+                },
+                {
+                  "key": "password",
+                  "value": "wrong_password"
+                }
+              ]
+            },
+            "description": "使用明确的虚构无效凭据验证登录失败契约。"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 Public catalog",
+      "description": "无需登录的品牌、车型、SKU、文章和可用库存查询。",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP status is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.test(\"Business code is 200\", function () {",
+              "  pm.expect(body.code).to.eql(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "List public brands",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response contains table rows\", function () {",
+                  "  pm.expect(body.rows).to.be.an(\"array\");",
+                  "  pm.expect(body).to.have.property(\"total\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/brand/public/list"
+          },
+          "response": []
+        },
+        {
+          "name": "List public models",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response contains table rows\", function () {",
+                  "  pm.expect(body.rows).to.be.an(\"array\");",
+                  "  pm.expect(body).to.have.property(\"total\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/car/model/public/list"
+          },
+          "response": []
+        },
+        {
+          "name": "List public SKUs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response contains table rows\", function () {",
+                  "  pm.expect(body.rows).to.be.an(\"array\");",
+                  "  pm.expect(body).to.have.property(\"total\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/car/sku/public/list"
+          },
+          "response": []
+        },
+        {
+          "name": "List public articles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response contains table rows\", function () {",
+                  "  pm.expect(body.rows).to.be.an(\"array\");",
+                  "  pm.expect(body).to.have.property(\"total\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/cms/article/public/list"
+          },
+          "response": []
+        },
+        {
+          "name": "List available inventory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Inventory summary contract is valid\", function () {",
+                  "  pm.expect(body.data).to.be.an(\"object\");",
+                  "  pm.expect(Number.isInteger(body.data.count)).to.eql(true);",
+                  "  pm.expect(body.data.count).to.be.at.least(0);",
+                  "  pm.expect(body.data.hasInventory).to.be.a(\"boolean\");",
+                  "  pm.expect(body.data.hasInventory).to.eql(body.data.count > 0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/car/inventory/public/available?modelId={{modelId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "car",
+                "inventory",
+                "public",
+                "available"
+              ],
+              "query": [
+                {
+                  "key": "modelId",
+                  "value": "{{modelId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 Customer read-only queries",
+      "description": "登录后只查询当前客户自己的资料、订单、试驾和售后记录。先执行 Customer login and save token。",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP status is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.test(\"Business code is 200\", function () {",
+              "  pm.expect(body.code).to.eql(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "Get current customer profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Profile data is an object\", function () {",
+                  "  pm.expect(body.data).to.be.an(\"object\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/info/my-profile"
+          },
+          "response": []
+        },
+        {
+          "name": "List my orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response contains table rows\", function () {",
+                  "  pm.expect(body.rows).to.be.an(\"array\");",
+                  "  pm.expect(body).to.have.property(\"total\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/sale/order/my-list?pageNum=1&pageSize=10"
+          },
+          "response": []
+        },
+        {
+          "name": "List my test-drive appointments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response contains table rows\", function () {",
+                  "  pm.expect(body.rows).to.be.an(\"array\");",
+                  "  pm.expect(body).to.have.property(\"total\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/cust/test-drive/my-list?pageNum=1&pageSize=10"
+          },
+          "response": []
+        },
+        {
+          "name": "List my after-sales tickets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response contains table rows\", function () {",
+                  "  pm.expect(body.rows).to.be.an(\"array\");",
+                  "  pm.expect(body).to.have.property(\"total\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/after-sales/ticket/my-list?pageNum=1&pageSize=10"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 Permission boundary",
+      "description": "严格验证普通客户不能访问后台用户列表。当前隔离环境会在此处暴露已记录缺陷 API-AUTHZ-001，不允许把断言改弱来获得绿色结果。",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Customer is forbidden from system user list [API-AUTHZ-001]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP status is 403\", function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Business code is 403\", function () {",
+                  "  pm.expect(body.code).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/sys/user/list",
+            "description": "预期 HTTP 403 且业务码 403。若返回 HTTP 200/业务码 500，则复现 API-AUTHZ-001。"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:18080/api",
+      "type": "string"
+    },
+    {
+      "key": "customerUsername",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "modelId",
+      "value": "1",
+      "type": "string"
+    }
+  ]
+}
