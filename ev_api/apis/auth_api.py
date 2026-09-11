@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import requests
 
+from ev_api.assertions import assert_json_code
 from ev_api.client import ApiClient
-from ev_api.redaction import redact_text
 
 
 class AuthApi:
@@ -23,12 +23,10 @@ class AuthApi:
     def authenticate(self, username: str, password: str) -> str:
         """Log in, attach the returned token to the client, and return it."""
         response = self.login(username, password)
-        payload = response.json()
-        token = (payload.get("data") or {}).get("token")
-        if not token:
-            safe_body = redact_text(response.text)[:5000]
-            raise AssertionError(
-                f"Login did not return token: status={response.status_code}, body={safe_body}"
-            )
+        payload = assert_json_code(response)
+        data = payload.get("data")
+        assert isinstance(data, dict), "Login data must be an object."
+        token = data.get("token")
+        assert isinstance(token, str) and token.strip(), "Login token must be a non-empty string."
         self.client.set_token(token)
         return token

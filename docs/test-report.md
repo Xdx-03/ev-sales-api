@@ -1,5 +1,7 @@
 # API 自动化测试报告与缺陷记录
 
+以下业务结果是 2026-08 的历史隔离环境记录。本轮框架契约、资源释放及 runner 改进未重新连接业务系统；新增合成验证独立记录，不修改历史失败、阻塞或证据无效状态。
+
 ## 1. 执行概况
 
 | 项目 | 结果 |
@@ -75,9 +77,11 @@
 
 ## 3. 缺陷记录
 
+<a id="api-authz-001"></a>
+
 ### API-AUTHZ-001 客户越权访问返回系统异常而非 403
 
-在线跟踪：[GitHub Issue #1](https://github.com/Xdx-03/ev-sales-api/issues/1)
+缺陷台账：[仓库 CSV 记录](../evidence/defects.csv)
 
 | 字段 | 内容 |
 | --- | --- |
@@ -112,17 +116,21 @@
 
 建议：为 `AuthorizationDeniedException` 或 `AccessDeniedException` 增加明确的 403 异常映射，并统一 HTTP 状态与业务码。修复后重新执行非破坏性回归。
 
+<a id="api-order-001"></a>
+
 ### API-ORDER-001 订单交付后库存锁定订单未释放
 
-在线跟踪：[GitHub Issue #2](https://github.com/Xdx-03/ev-sales-api/issues/2)
+缺陷台账：[仓库 CSV 记录](../evidence/defects.csv)
 
 订单、两类支付流水、库存销售状态和交付单都已正确更新，但交付后库存记录的 `lock_order_id` 仍非空。只读 SQL 复核结果为 `order_status=70`、`payments=2`、`inventory_status=40`、`lock_released=0`、`delivery_status=30`。
 
 从实现推断，`setLockOrderId(null)` 后调用 `updateById` 可能被 MyBatis-Plus 默认非空更新策略忽略。该推断需要开发确认，自动化断言保持不变。
 
+<a id="api-td-rating-001"></a>
+
 ### API-TD-RATING-001 试驾反馈接受评分 0 的非法值
 
-在线跟踪：[GitHub Issue #3](https://github.com/Xdx-03/ev-sales-api/issues/3)
+缺陷台账：[仓库 CSV 记录](../evidence/defects.csv)
 
 评分 0 请求返回 HTTP 200、业务码 200，与约定的 1–5 范围不符。评分 6 的旧结果因复用已被修改的预约而不作为缺陷证据。实现中未观察到评分范围校验，数据库表也没有相应 CHECK 约束；这会污染满意度统计和客户标签数据。评分 6 必须使用另一条未评价预约独立复测。
 
@@ -137,3 +145,9 @@ Windows 本地执行曾因 Python 默认 GBK 与终端 UTF-8 不一致导致中�
 ## 5. 测试结论
 
 非破坏性回归通过率为 94.7%（18/19），只读数据库辅助校验通过率为 100%（1/1）。7 个写数据场景中，3 个通过、2 个确认因产品缺陷失败、1 个环境阻塞、1 个证据无效。当前共有 3 个待修复产品缺陷，因此质量门禁不通过。修复后必须使用相同断言原样回归；评分 6 场景需先准备独立预约再执行。
+
+## 6. 2026-09-11 框架检查记录（独立于业务结果）
+
+Windows / Python 3.11 本地实际执行 `framework_checks/`：90 passed、0 failed、0 skipped，生成 `reports/framework-checks.xml`。验证响应与登录成功契约、会话关闭、AI 文本/历史及已确认降级、runner 的清理和结果判定；使用合成数据、回环 HTTP 服务和临时 pytest 子进程。
+
+业务场景只完成全部 27 条及安全选择集 19 条收集验证；未重新运行后端、数据库、Ollama 或 Newman。以上结果不能替代第 1–5 节的历史业务证据，也不证明原有产品缺陷已经修复。复现命令见 [README](../README.md#无需业务环境的可复现验证)。

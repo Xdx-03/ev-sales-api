@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -19,6 +20,14 @@ ROOT_DIR = Path(__file__).resolve().parent
 REPORTS_DIR = ROOT_DIR / "reports"
 ALLURE_RESULTS = REPORTS_DIR / "allure-results"
 JUNIT_XML = REPORTS_DIR / "junit.xml"
+
+
+def _is_link(path: Path) -> bool:
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except FileNotFoundError:
+        return False
+    return path.is_symlink() or bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def configure_output_encoding() -> None:
@@ -58,13 +67,11 @@ def prepare_report_outputs() -> None:
             f"Refusing to use the project root itself as the reports directory: {workspace_root}"
         )
 
-    is_junction = getattr(REPORTS_DIR, "is_junction", lambda: False)
-    if REPORTS_DIR.is_symlink() or is_junction():
+    if _is_link(REPORTS_DIR):
         raise ValueError(f"Refusing to clean a linked reports directory: {REPORTS_DIR}")
 
     for output in (ALLURE_RESULTS, JUNIT_XML):
-        output_is_junction = getattr(output, "is_junction", lambda: False)
-        if output.is_symlink() or output_is_junction():
+        if _is_link(output):
             raise ValueError(f"Refusing to clean a linked report output: {output}")
         resolved = output.resolve()
         try:
@@ -86,19 +93,25 @@ def prepare_report_outputs() -> None:
 
 
 def parse_junit(path: Path, duration_seconds: float, env_name: str, report_url: str) -> TestSummary:
-    if not path.exists():
-        return TestSummary(
-            "新能源汽车销售系统接口自动化", env_name, 0, 0, 0, 0, duration_seconds, report_url
-        )
-
-    root = ET.parse(path).getroot()
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError):
+        raise ValueError("JUnit report is missing, unreadable, or malformed.") from None
+    if root.tag not in {"testsuite", "testsuites"}:
+        raise ValueError("JUnit report has an unsupported root element.")
     suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
     total = failed = skipped = errors = 0
     for suite in suites:
-        total += int(suite.attrib.get("tests", 0))
-        failed += int(suite.attrib.get("failures", 0))
-        errors += int(suite.attrib.get("errors", 0))
-        skipped += int(suite.attrib.get("skipped", 0))
+        try:
+            counts = [int(suite.attrib[key]) for key in ("tests", "failures", "errors", "skipped")]
+        except (KeyError, ValueError):
+            raise ValueError("JUnit report contains missing or invalid counters.") from None
+        if any(count < 0 for count in counts) or sum(counts[1:]) > counts[0]:
+            raise ValueError("JUnit report contains inconsistent counters.")
+        total += counts[0]
+        failed += counts[1]
+        errors += counts[2]
+        skipped += counts[3]
     failed += errors
     passed = max(total - failed - skipped, 0)
     return TestSummary(
@@ -139,13 +152,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     local_report_reference = ALLURE_RESULTS.relative_to(ROOT_DIR).as_posix()
     report_reference = sanitize_report_reference(config.feishu.report_url or local_report_reference)
-    summary = parse_junit(JUNIT_XML, duration, args.env, report_reference)
+    try:
+        summary = parse_junit(JUNIT_XML, duration, args.env, report_reference)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        summary = TestSummary(
+            "新能源汽车销售系统接口自动化", args.env, 0, 0, 0, 0, duration, report_reference
+        )
     summary.run_id = test_run.run_id
     effective_exit_code = exit_code
-    if exit_code == 0 and (summary.passed == 0 or summary.skipped > 0):
+    if exit_code == 0 and (summary.passed == 0 or summary.skipped > 0 or summary.failed > 0):
         effective_exit_code = 1
         print(
-            "The run produced zero passed tests or skipped scenarios; treating it as incomplete.",
+            "The run has missing results, zero passes, skipped scenarios, failures or errors; "
+            "refusing a successful exit.",
             file=sys.stderr,
         )
     summary.exit_code = effective_exit_code

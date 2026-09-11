@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   quality-and-collection:
-    name: Code quality and API suite collection
+    name: Framework checks and API collection
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -33,8 +33,20 @@ jobs:
         run: python scripts/validate_commit_messages.py "$BASE_SHA" "$HEAD_SHA"
       - run: python -m ruff format --check .
       - run: python -m ruff check .
-      - run: python -m compileall -q ev_api tests scripts run_api_tests.py
+      - run: python -m compileall -q ev_api tests framework_checks scripts run_api_tests.py
       - run: bash -n scripts/check_linux_test_env.sh
       - run: python scripts/validate_postman_assets.py
-      - run: python -m pytest --collect-only -q
-      - run: python -m pytest --collect-only -q -m "not destructive and not database"
+      - name: Collect business API scenarios (no live requests)
+        run: python -m pytest --collect-only -q
+      - name: Collect safe business selector (no live requests)
+        run: python -m pytest --collect-only -q -m "not destructive and not database"
+      - name: Execute framework contracts (synthetic data only)
+        run: python -m pytest framework_checks -q --junitxml=reports/framework-checks.xml
+      - name: Upload synthetic framework check evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-framework-checks-junit
+          path: reports/framework-checks.xml
+          if-no-files-found: warn
+          retention-days: 14

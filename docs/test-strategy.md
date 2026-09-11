@@ -106,6 +106,10 @@ python run_api_tests.py --no-feishu --run-destructive -m destructive
 
 ### 5.4 韧性场景
 
+`framework_checks/` 单独验证框架契约：回环 HTTP 服务提供合成响应；真实 pytest 子进程验证 fixture 清理和报告退出行为；不读取业务凭据、不发送飞书通知、不访问模型或数据库。运行 `python -m pytest framework_checks -q --junitxml=reports/framework-checks.xml`，报告不并入 27 条业务场景或历史业务通过率。
+
+AI 正常会话要求回复为非空字符串、会话标识正确、问题与回复在历史中一致。已根据 `AiServiceImpl.java` 的空回复及模型服务异常分支确认两种降级文案，正常会话不得把这些文案判为成功。合成检查仅证明契约能识别这些情况；真实 Ollama 可用性、回答事实性和推荐质量需另行验证。
+
 
 ### 5.5 只读数据库校验
 
@@ -135,6 +139,7 @@ python run_api_tests.py --no-feishu --run-database-checks -m database
 ## 8. 准出标准
 
 - 目标选择器实际执行了至少一个测试，不能以“零执行”作为成功；
+- JUnit 必须有效且与完整成功一致；跳过、失败、错误不能在 pytest 退出 0 时被漏报，pytest 非零退出码必须保留；
 - 本次选定范围内的高风险场景无未解释失败；
 - 失败项保留脱敏后的 JUnit/Allure 原始结果和日志；
 - 写数据场景产生的数据已记录，必要时由测试环境统一重置；

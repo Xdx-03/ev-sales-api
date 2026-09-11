@@ -8,7 +8,7 @@
 ![Allure](https://img.shields.io/badge/report-Allure-FF6A00)
 ![Test type](https://img.shields.io/badge/type-API%20%2B%20read--only%20DB-334155)
 
-项目以黑盒接口测试为主，不包含被测系统源码或白盒单元测试；另提供默认关闭的只读数据库辅助校验，用于比较 API 结果与关键记录状态。
+项目以黑盒接口测试为主，不包含被测系统源码或其白盒单元测试；另提供默认关闭的只读数据库辅助校验，用于比较 API 结果与关键记录状态。独立的 `framework_checks/` 使用合成响应验证测试框架自身的可靠性，与业务回归分别计数。
 
 ## 项目成果概览
 
@@ -22,7 +22,27 @@
 
 > “可收集”表示用例结构、标记和依赖加载成功；只有连接隔离测试环境实际执行后，才记录业务通过率。
 
-最近一次隔离环境非破坏性回归共执行 19 个场景：18 个通过、1 个失败、0 个跳过；只读数据库校验 1/1 通过。7 个写数据场景中有 3 个通过、2 个确认暴露产品缺陷、1 个因 Ollama 不可用而环境阻塞、1 个因前置数据污染而证据无效。所有结果和缺陷均见 [测试报告与缺陷记录](docs/test-report.md)。
+历史隔离环境记录（2026-08-20）：非破坏性回归共执行 19 个场景，18 个通过、1 个失败、0 个跳过；只读数据库校验 1/1 通过。7 个写数据场景中有 3 个通过、2 个确认暴露产品缺陷、1 个因 Ollama 不可用而环境阻塞、1 个因前置数据污染而证据无效。本轮框架改进未重新连接业务环境；历史结果和缺陷均保留在 [测试报告与缺陷记录](docs/test-report.md)。
+
+## 无需业务环境的可复现验证
+
+安装开发依赖后，即可实际执行框架检查，不需要客户账号、数据库或模型服务：
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest framework_checks -q --junitxml=reports/framework-checks.xml
+```
+
+| 可核验能力 | 检查方式 | 能证明的边界 |
+| --- | --- | --- |
+| 响应与认证契约 | 回环 HTTP 服务返回正常、非 JSON、错误状态和错误 Token 类型 | 成功须同时满足 HTTP 200、JSON 对象和业务码 200；错误业务码保持接口约定 |
+| 资源隔离 | 真正的 pytest 子进程覆盖预检、认证、测试失败及清理 | 每个认证用例独立登录，成功和异常后均关闭客户端 |
+| AI 会话可靠性 | 合成正常/降级回复与历史记录 | 拒绝类型错误、两种已确认降级和历史不一致；不代表事实性、推荐质量或幻觉评测 |
+| 结果可信度 | 临时目录内执行合成 pytest 套件 | runner 拒绝零执行、跳过、报告损坏及失败/错误；保留 pytest 非零退出码 |
+
+这些检查只在回环地址或受控替身上运行，JUnit 只包含合成结果；使用上述 pytest 命令，不发送业务飞书通知。默认 `pytest.ini` 仍只收集 `tests/` 中的 27 条业务场景。GitHub Actions 分别展示框架执行和业务收集，并上传 `api-framework-checks-junit` 产物。
+
+本地记录（2026-09-11，Windows / Python 3.11）：**90 项框架检查通过，0 失败、0 跳过**；业务场景仅确认全部 27 条与安全选择集 19 条可收集。CI 配置已包含同一检查命令，线上执行结果以 Actions 为准。
 
 ## 被测业务链路
 
@@ -97,11 +117,12 @@ GitHub Actions 和 Jenkins 使用相同命令，避免本地、评审和 CI 采�
 
 ```text
 .
-├── .github/workflows/          # GitHub 用例收集门禁
+├── .github/workflows/          # 框架执行、静态检查与业务收集门禁
 ├── .editorconfig              # 编辑器基础格式约束
 ├── config/env.example.yaml    # 无密钥的配置模板
 ├── docs/                      # 项目、策略、覆盖和证据
 ├── evidence/                  # 测试用例与真实缺陷台账（CSV）
+├── framework_checks/          # 合成框架契约，独立于业务回归
 ├── ev_api/
 │   ├── apis/                  # 按功能模块拆分的领域 API
 │   └── *.py                   # HTTP/数据库适配、配置、断言、脱敏、通知
@@ -191,7 +212,7 @@ python run_api_tests.py --no-feishu --run-database-checks -m database
 - `postman/EV-Sales-API.postman_collection.json`
 - `postman/EV-Sales-API.postman_environment.example.json`
 
-集合包含 12 个登录、公开查询、客户本人查询和权限边界请求，不包含订单、预约、支付或售后写入。环境模板只提供本机地址，账号、密码和 Token 均为空；本地副本建议命名为 `*.local.postman_environment.json`，该文件已被 Git 忽略。普通客户访问后台用户列表使用严格 403 断言，当前会真实复现 [`API-AUTHZ-001`](https://github.com/Xdx-03/ev-sales-api/issues/1)，不会为了获得绿色结果降低标准。
+集合包含 12 个登录、公开查询、客户本人查询和权限边界请求，不包含订单、预约、支付或售后写入。环境模板只提供本机地址，账号、密码和 Token 均为空；本地副本建议命名为 `*.local.postman_environment.json`，该文件已被 Git 忽略。普通客户访问后台用户列表使用严格 403 断言，当前会真实复现 [`API-AUTHZ-001`](docs/test-report.md#api-authz-001)，不会为了获得绿色结果降低标准。
 
 Collection 级预请求门禁只允许 HTTPS 或本机回环地址，并拒绝 URL 内嵌凭据；不安全目标会先登记失败断言，再通过 `pm.execution.skipRequest()` 阻止请求发送。环境模板将用户名、密码和 Token 标记为 `secret`，静态校验会同时检查门禁、Bearer Token 变量和每个请求的 HTTP/业务码断言。
 
@@ -199,7 +220,7 @@ CI 会运行静态资产校验；Postman/Newman 真实业务执行尚未纳入 C
 
 ## 用例分层
 
-| 标记 | 用途 | 默认 CI |
+| 标记 | 用途 | 默认安全回归选择器（Actions 仅收集） |
 | --- | --- | --- |
 | `api` | 黑盒 REST API 场景 | 执行 |
 | `regression` | 稳定回归场景 | 按其他安全标记筛选 |
@@ -227,7 +248,7 @@ allure generate reports/allure-results -o reports/allure-report --clean
 
 生成 HTML 报告需另外安装 Java 与 [Allure Commandline](https://allurereport.org/docs/install/)。Python 依赖只包含 Allure 的 pytest 适配器。
 
-- GitHub Actions 执行格式、静态检查、Postman 资产校验和 pytest 用例收集，不伪造“业务全部通过”。
+- GitHub Actions 执行格式、静态检查、Postman 资产校验、合成框架检查及业务用例收集，上传独立框架 JUnit，不将其计为业务通过。
 - Jenkins 通过 Secret File 注入所选环境，按参数执行安全回归或显式授权的高风险套件，并发布 JUnit/Allure 原始结果。
 - 飞书通知为可选能力；通知失败不会覆盖 pytest 的真实退出码。
 
@@ -251,7 +272,7 @@ Jenkinsfile 提供以下构建参数：
 ## 安全与可靠性门禁
 
 - 后端不可达、返回 5xx、非 JSON 或业务码异常时立即失败，不使用 `skip` 造成“全跳过但 CI 仍绿”。
-- 一次执行如果没有通过用例或存在任何跳过场景，统一入口返回失败。
+- 一次执行如果没有通过用例，存在任何跳过、失败或错误，或 JUnit 缺失、损坏，统一入口返回失败；pytest 原有非零退出码保持不变。
 - `destructive` 用例同时受全局收集钩子和 `--run-destructive` 显式开关保护。
 - `database` 用例必须显式开启；拒绝 root、写权限、转授权能力和未验证 TLS 的远程数据库账号。
 - HTTP 调试附件和框架生成的错误信息会屏蔽密码、Authorization、Token/JWT、Cookie、Secret、API Key、个人信息、JSON 业务 ID 以及 URL 路径中的数字标识；公开报告前仍需人工抽查。

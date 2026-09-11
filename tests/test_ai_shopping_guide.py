@@ -2,7 +2,12 @@ import pytest
 
 from ev_api.allure_compat import feature, step, title
 from ev_api.apis import AiApi
-from ev_api.assertions import assert_json_code, assert_unauthorized_or_forbidden
+from ev_api.assertions import (
+    assert_ai_history,
+    assert_ai_reply,
+    assert_json_code,
+    assert_unauthorized_or_forbidden,
+)
 
 pytestmark = [pytest.mark.api, pytest.mark.regression]
 
@@ -43,24 +48,17 @@ def test_ai_chat_reply_and_history(
 
     with step("发送AI购车咨询"):
         chat_payload = assert_json_code(api.send_message(question))
-        chat_data = chat_payload.get("data") or {}
+        chat_data = chat_payload.get("data")
 
     with step("校验会话标识和非空回复"):
-        session_id = chat_data.get("sessionId")
-        reply = str(chat_data.get("reply") or "").strip()
-        assert isinstance(session_id, str) and len(session_id) == 32
-        assert len(reply) >= min_reply_length
+        session_id, reply = assert_ai_reply(chat_data, min_reply_length)
 
     with step("根据sessionId查询当前用户的会话历史"):
         history_payload = assert_json_code(api.get_history(session_id))
-        records = history_payload.get("data") or []
-        assert isinstance(records, list) and records
+        records = history_payload.get("data")
 
     with step("校验问题与回复已写入会话历史"):
-        latest = records[-1]
-        assert latest.get("sessionId") == session_id
-        assert latest.get("question") == question
-        assert str(latest.get("answer") or "").strip() == reply
+        assert_ai_history(records, session_id, question, reply)
 
 
 @feature("AI导购")

@@ -7,6 +7,12 @@ read-only API-to-database check. It does not contain the application source or
 white-box unit tests. Review behavior, contracts, isolation, evidence, and test
 framework maintainability within that boundary.
 
+`framework_checks/` separately verifies this repository's HTTP/assertion, fixture,
+AI reply/history, and runner contracts with synthetic loopback traffic or resource
+substitutes. It does not test application internals and is excluded from the
+business counts and default `testpaths = tests` selection. Never require live
+credentials, business services, databases, or notifications for these checks.
+
 ## Required Static Checks
 
 Run these checks for repository changes that do not require a live test system:
@@ -14,11 +20,12 @@ Run these checks for repository changes that do not require a live test system:
 ```bash
 python -m ruff format --check .
 python -m ruff check .
-python -m compileall -q ev_api tests scripts run_api_tests.py
+python -m compileall -q ev_api tests framework_checks scripts run_api_tests.py
 bash -n scripts/check_linux_test_env.sh
 python scripts/validate_postman_assets.py
 python -m pytest --collect-only -q
 python -m pytest --collect-only -q -m "not destructive and not database"
+python -m pytest framework_checks -q --junitxml=reports/framework-checks.xml
 ```
 
 Do not describe collection-only validation as a successful business regression.
@@ -88,6 +95,7 @@ their documented isolated-environment prerequisites.
   “collection validated”. Never infer business success from compilation or CI
   collection checks.
 - Do not request white-box/unit-test coverage for this repository. Recommend a
-  focused black-box, contract, or explicitly gated gray-box scenario instead.
+  focused black-box, contract, or explicitly gated gray-box scenario for the
+  application instead. Framework reliability regressions belong in `framework_checks/`.
 - Avoid style-only comments already enforced by Ruff. Focus review comments on
   P0/P1 correctness, safety, false-green risk, data isolation, and maintainability.

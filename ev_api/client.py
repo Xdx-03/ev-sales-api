@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+from types import TracebackType
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
@@ -37,6 +38,21 @@ class ApiClient:
 
     def set_token(self, token: str) -> None:
         self.session.headers.update({"Authorization": f"Bearer {token}"})
+
+    def close(self) -> None:
+        """Release the HTTP connection pool owned by this client."""
+        self.session.close()
+
+    def __enter__(self) -> ApiClient:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
 
     def _validate_transport(self) -> None:
         parsed = urlsplit(self.base_url)

@@ -57,20 +57,25 @@ def test_run() -> TestRunContext:
 
 
 @pytest.fixture(scope="session")
-def anonymous_client(api_config: ApiConfig, test_run: TestRunContext) -> ApiClient:
+def anonymous_client(
+    api_config: ApiConfig, test_run: TestRunContext
+) -> Generator[ApiClient, None, None]:
     client = ApiClient(
         api_config.base_url,
         timeout=api_config.timeout,
         test_run_id=test_run.run_id,
     )
     try:
-        verify_backend(client)
-    except BackendUnavailableError as exc:
-        pytest.exit(
-            f"API preflight failed; start or fix the configured backend before running API tests. {exc}",
-            returncode=2,
-        )
-    return client
+        try:
+            verify_backend(client)
+        except BackendUnavailableError:
+            pytest.exit(
+                "API preflight failed; start or fix the configured backend before running API tests.",
+                returncode=2,
+            )
+        yield client
+    finally:
+        client.close()
 
 
 @pytest.fixture
@@ -78,7 +83,7 @@ def customer_client(
     api_config: ApiConfig,
     anonymous_client: ApiClient,
     test_run: TestRunContext,
-) -> ApiClient:
+) -> Generator[ApiClient, None, None]:
     if not api_config.customer.username or not api_config.customer.password:
         pytest.exit(
             "Customer test credentials are required for the selected API tests.", returncode=2
@@ -88,8 +93,11 @@ def customer_client(
         timeout=api_config.timeout,
         test_run_id=test_run.run_id,
     )
-    AuthApi(client).authenticate(api_config.customer.username, api_config.customer.password)
-    return client
+    try:
+        AuthApi(client).authenticate(api_config.customer.username, api_config.customer.password)
+        yield client
+    finally:
+        client.close()
 
 
 @pytest.fixture
@@ -97,7 +105,7 @@ def admin_client(
     api_config: ApiConfig,
     anonymous_client: ApiClient,
     test_run: TestRunContext,
-) -> ApiClient:
+) -> Generator[ApiClient, None, None]:
     if not api_config.admin.username or not api_config.admin.password:
         pytest.exit(
             "Administrator test credentials are required for the selected API tests.", returncode=2
@@ -107,8 +115,11 @@ def admin_client(
         timeout=api_config.timeout,
         test_run_id=test_run.run_id,
     )
-    AuthApi(client).authenticate(api_config.admin.username, api_config.admin.password)
-    return client
+    try:
+        AuthApi(client).authenticate(api_config.admin.username, api_config.admin.password)
+        yield client
+    finally:
+        client.close()
 
 
 @pytest.fixture
