@@ -267,7 +267,7 @@ Jenkinsfile 提供以下构建参数：
 
 在 Jenkins Credentials 中分别创建 `ev-sales-api-test-config` 和 `ev-sales-api-staging-config` 两个 Secret File。文件结构沿用 `config/env.example.yaml`，并把顶层 `default` 分别改为 `test` 或 `staging`。地址、专用账号、业务数据或 Webhook 变化时只更新 Jenkins 凭据，不修改测试代码。
 
-`RUN_LIVE_TESTS=false` 时只执行 Ruff、编译、Postman 资产校验和 pytest 收集，不冒充真实 API 回归。Jenkinsfile 目前完成了代码和本地静态检查，尚未在真实 Jenkins 节点执行。
+`RUN_LIVE_TESTS=false` 时执行 Ruff、编译、Postman 资产校验、pytest 收集，以及 90 项合成框架检查；无需业务凭据，不连接真实 API 环境。框架检查在独立 `Framework checks` 阶段运行，发布 `reports/framework-checks.xml`，不计为业务回归。每次检出后清理生成证据，只有本轮启动的 Live 阶段才能发布业务报告。Jenkinsfile 目前完成了代码和本地静态检查，尚未在真实 Jenkins 节点执行。
 
 ## 安全与可靠性门禁
 
