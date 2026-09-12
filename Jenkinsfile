@@ -78,7 +78,7 @@ pipeline {
                             @echo off
                             python -m venv .venv
                             if errorlevel 1 exit /b %errorlevel%
-                            .venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+                            .venv\\Scripts\\python.exe -m pip install -r requirements-dev.txt
                             if errorlevel 1 exit /b %errorlevel%
                         '''
                     }
@@ -102,17 +102,17 @@ pipeline {
                     } else {
                         bat '''
                             @echo off
-                            .venv/Scripts/python.exe -m ruff format --check .
+                            .venv\\Scripts\\python.exe -m ruff format --check .
                             if errorlevel 1 exit /b %errorlevel%
-                            .venv/Scripts/python.exe -m ruff check .
+                            .venv\\Scripts\\python.exe -m ruff check .
                             if errorlevel 1 exit /b %errorlevel%
-                            .venv/Scripts/python.exe -m compileall -q ev_api tests framework_checks scripts run_api_tests.py
+                            .venv\\Scripts\\python.exe -m compileall -q ev_api tests framework_checks scripts run_api_tests.py
                             if errorlevel 1 exit /b %errorlevel%
-                            .venv/Scripts/python.exe scripts/validate_postman_assets.py
+                            .venv\\Scripts\\python.exe scripts/validate_postman_assets.py
                             if errorlevel 1 exit /b %errorlevel%
-                            .venv/Scripts/python.exe -m pytest --collect-only -q
+                            .venv\\Scripts\\python.exe -m pytest --collect-only -q
                             if errorlevel 1 exit /b %errorlevel%
-                            .venv/Scripts/python.exe -m pytest --collect-only -q -m "not destructive and not database"
+                            .venv\\Scripts\\python.exe -m pytest --collect-only -q -m "not destructive and not database"
                             if errorlevel 1 exit /b %errorlevel%
                         '''
                     }
@@ -126,7 +126,7 @@ pipeline {
                     if (isUnix()) {
                         sh '.venv/bin/python -m pytest framework_checks -q --junitxml=reports/framework-checks.xml'
                     } else {
-                        bat '@.venv/Scripts/python.exe -m pytest framework_checks -q --junitxml=reports/framework-checks.xml'
+                        bat '@.venv\\Scripts\\python.exe -m pytest framework_checks -q --junitxml=reports/framework-checks.xml'
                     }
                 }
             }
@@ -213,7 +213,7 @@ pipeline {
                                 label: "Run ${params.TEST_SUITE} on ${params.TEST_ENV}",
                                 script: """
                                     @echo off
-                                    .venv/Scripts/python.exe run_api_tests.py --config \"%EV_API_CONFIG_FILE%\" --env \"${params.TEST_ENV}\" -m \"${suite.marker}\" ${runnerOptions}
+                                    .venv\\Scripts\\python.exe run_api_tests.py --config \"%EV_API_CONFIG_FILE%\" --env \"${params.TEST_ENV}\" -m \"${suite.marker}\" ${runnerOptions}
                                 """
                             )
                         }
@@ -243,3 +243,4 @@ pipeline {
         }
     }
 }
+
